@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incheon Kia — Contact Centre Dashboard | Inbound Focus + Export</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181b22;
+    --border: #1e2230;
+    --accent: #c8102e;
+    --accent2: #ff3355;
+    --gold: #f0a500;
+    --text: #e8eaf0;
+    --text-dim: #6b7280;
+    --text-mid: #9ca3af;
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --orange: #f97316;
+    --teal: #14b8a6;
+    --red-soft: #f87171;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-bar { width: 4px; height: 32px; background: var(--accent); border-radius: 2px; }
+  .logo-text { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; color: var(--text); }
+  .logo-sub { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+  .live-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* MAIN */
+  main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* CONTROL PANEL */
+  .control-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .control-panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+
+  .controls-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .upload-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+
+  .upload-label {
+    font-size: 12px; color: var(--text-mid); font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .type-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-family: 'DM Mono', monospace; font-weight: 500; }
+  .badge-out { background: rgba(200,16,46,0.15); color: var(--accent2); border: 1px solid rgba(200,16,46,0.3); }
+  .badge-in  { background: rgba(59,130,246,0.15); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+
+  .file-input-wrap { position: relative; }
+  .file-input-wrap input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; }
+
+  .file-btn {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 16px; font-size: 13px; color: var(--text-mid); cursor: pointer;
+    transition: border-color 0.2s, color 0.2s; min-width: 220px;
+  }
+  .file-btn:hover { border-color: var(--accent); color: var(--text); }
+  .file-btn.loaded { border-color: var(--green); color: var(--green); }
+  .file-icon { font-size: 16px; }
+
+  /* DATE RANGE */
+  .date-range-group { display: flex; flex-direction: column; gap: 6px; }
+  .date-label { font-size: 12px; color: var(--text-mid); font-weight: 500; }
+
+  .date-range-row { display: flex; align-items: center; gap: 8px; }
+
+  .date-sep { font-size: 11px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+
+  input[type="date"] {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; color: var(--text); font-family: 'DM Mono', monospace;
+    cursor: pointer; outline: none; transition: border-color 0.2s; width: 155px;
+  }
+  input[type="date"]:hover, input[type="date"]:focus { border-color: var(--accent); }
+
+  .run-btn {
+    background: var(--accent); border: none; border-radius: 8px; padding: 10px 28px;
+    font-size: 13px; font-weight: 600; color: #fff; cursor: pointer; letter-spacing: 0.5px;
+    transition: background 0.2s, transform 0.1s; font-family: 'DM Sans', sans-serif;
+    height: 42px; align-self: flex-end;
+  }
+  .run-btn:hover { background: var(--accent2); }
+  .run-btn:active { transform: scale(0.97); }
+  .run-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; }
+
+  .export-btn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 20px; font-size: 13px; font-weight: 500; color: var(--text-mid);
+    cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+    height: 42px; align-self: flex-end; display: flex; align-items: center; gap: 8px;
+  }
+  .export-btn:hover { border-color: var(--accent); color: var(--text); background: var(--surface); }
+
+  /* STATUS BAR */
+  #status-bar { margin-top: 14px; font-size: 12px; color: var(--text-dim); font-family: 'DM Mono', monospace; display: none; }
+  #status-bar.show { display: block; }
+  #status-bar.error { color: #f87171; }
+  #status-bar.success { color: var(--green); }
+
+  /* DASHBOARD */
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+
+  /* DATE BANNER */
+  .date-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .date-display { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px; color: var(--text); }
+  .date-display span { color: var(--accent); }
+
+  .summary-pills { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pill { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 14px; font-size: 12px; color: var(--text-mid); font-family: 'DM Mono', monospace; }
+  .pill strong { color: var(--text); }
+
+  /* KPI STRIP - INBOUND FOCUS (5 cards) */
+  .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; position: relative; overflow: hidden;
+  }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+  .kpi-card.c1::before { background: var(--blue); }
+  .kpi-card.c2::before { background: var(--green); }
+  .kpi-card.c3::before { background: var(--red-soft); }
+  .kpi-card.c4::before { background: var(--purple); }
+  .kpi-card.c5::before { background: var(--gold); }
+
+  .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 10px; }
+  .kpi-value { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 1px; line-height: 1; }
+  .kpi-card.c1 .kpi-value { color: var(--blue); }
+  .kpi-card.c2 .kpi-value { color: var(--green); }
+  .kpi-card.c3 .kpi-value { color: var(--red-soft); }
+  .kpi-card.c4 .kpi-value { color: var(--purple); }
+  .kpi-card.c5 .kpi-value { color: var(--gold); }
+  .kpi-sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2px;
+    color: var(--text); margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* TABLE */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 32px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th { padding: 12px 16px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); font-weight: 500; white-space: nowrap; }
+  th.right { text-align: right; }
+  td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  td.right { text-align: right; font-family: 'DM Mono', monospace; font-size: 12px; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  .agent-name { font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .agent-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; text-transform: uppercase; }
+  .ab-badge { font-size: 10px; background: rgba(107,114,128,0.2); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; font-family: 'DM Mono', monospace; }
+
+  .bar-cell { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+  .mini-bar { height: 4px; border-radius: 2px; min-width: 2px; max-width: 80px; }
+
+  /* CHARTS (hidden from export but kept for dashboard) */
+  .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 32px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .chart-card.full-width { grid-column: 1 / -1; }
+  .chart-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+  .chart-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-mid); font-weight: 500; }
+  .chart-accent-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .chart-canvas-wrap { position: relative; height: 220px; }
+
+  .empty-state { text-align: center; padding: 80px 20px; color: var(--text-dim); }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+  .empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; margin-bottom: 8px; color: var(--text-mid); }
+  .empty-sub { font-size: 13px; }
+
+  footer { text-align: center; padding: 24px; font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); letter-spacing: 1px; font-family: 'DM Mono', monospace; }
+
+  /* Export container styling */
+  #export-container {
+    background: var(--bg);
+    padding: 24px 32px;
+    border-radius: 16px;
+  }
+
+  @media (max-width: 900px) {
+    main { padding: 16px; }
+    .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .chart-card.full-width { grid-column: 1; }
+    .controls-row { flex-direction: column; }
+    .file-btn { min-width: unset; width: 100%; }
+    .date-range-row { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-bar"></div>
+    <div>
+      <div class="logo-text">INCHEON KIA</div>
+      <div class="logo-sub">Contact Centre Intelligence · Abandoned ≤6PM</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-dot"></div>
+    <span id="header-date">No data loaded</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- CONTROL PANEL -->
+  <div class="control-panel">
+    <div class="control-panel-title">Data Source & Filter</div>
+    <div class="controls-row">
+      <div class="upload-group">
+        <div class="upload-label">
+          Outbound Calls CSV
+          <span class="type-badge badge-out">OUTBOUND</span>
+        </div>
+        <div class="file-input-wrap">
+          <input type="file" id="outbound-file" accept=".csv">
+          <div class="file-btn" id="outbound-btn">
+            <span class="file-icon">📤</span>
+            <span id="outbound-filename">Choose outbound CSV…</span>
+          </div>
+        </div>
+      </div>
+      <div class="upload-group">
+        <div class="upload-label">
+          Inbound Calls CSV
+          <span class="type-badge badge-in">INBOUND</span>
+        </div>
+        <div class="file-input-wrap">
+          <input type="file" id="inbound-file" accept=".csv">
+          <div class="file-btn" id="inbound-btn">
+            <span class="file-icon">📥</span>
+            <span id="inbound-filename">Choose inbound CSV…</span>
+          </div>
+        </div>
+      </div>
+      <div class="date-range-group">
+        <div class="date-label">Date Range</div>
+        <div class="date-range-row">
+          <input type="date" id="date-from">
+          <span class="date-sep">→</span>
+          <input type="date" id="date-to">
+        </div>
+      </div>
+      <button class="run-btn" onclick="runDashboard()">APPLY</button>
+      <button class="export-btn" id="export-btn" onclick="exportToJPEG()" style="display: none;">
+        📸 Export JPEG
+      </button>
+    </div>
+    <div id="status-bar"></div>
+  </div>
+
+  <!-- DASHBOARD (visible area) -->
+  <div id="dashboard">
+    <!-- This wrapper is what gets captured for export -->
+    <div id="export-container">
+      <div class="date-banner" id="export-date-banner">
+        <div class="date-display" id="date-display">—</div>
+        <div class="summary-pills" id="summary-pills"></div>
+      </div>
+
+      <div class="kpi-strip" id="kpi-strip"></div>
+
+      <div class="section-title">Agent Performance</div>
+      <div class="table-wrap" id="export-table">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Agent</th>
+              <th class="right">Total Handled</th>
+              <th class="right">Answered</th>
+              <th class="right">Missed (NO ANSWER)</th>
+              <th class="right">Missed %</th>
+              <th class="right">On-Call Time</th>
+              <th class="right">Avg Handle Time</th>
+            </tr>
+          </thead>
+          <tbody id="agent-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Charts section (not included in export) -->
+    <div class="section-title">Metric Breakdown by Agent</div>
+    <div class="charts-grid">
+      <div class="chart-card full-width">
+        <div class="chart-header"><div class="chart-title">Total Calls Handled</div><div class="chart-accent-dot" style="background:var(--accent2)"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-handled"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">Total Calls Answered</div><div class="chart-accent-dot" style="background:var(--green)"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-answered"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">Total Calls Missed (Inbound NO ANSWER)</div><div class="chart-accent-dot" style="background:var(--gold)"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-missed"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">Total On-Call Time (minutes)</div><div class="chart-accent-dot" style="background:var(--blue)"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-oncall"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">Avg Call Handling Time (seconds)</div><div class="chart-accent-dot" style="background:var(--purple)"></div></div>
+        <div class="chart-canvas-wrap"><canvas id="chart-avg"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="empty-state" class="empty-state">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">No Data Loaded</div>
+    <div class="empty-sub">Upload both CSV files, select a date range, then click APPLY.</div>
+  </div>
+</main>
+
+<footer>INCHEON KIA CONTACT CENTRE DASHBOARD · ABANDONED RULE: Last missed call BEFORE 6PM only</footer>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const ALLOWED_AGENTS = ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar'];
+const INBOUND_MISSED_DISPS = ['BUSY', 'QUEUE TIMEOUT', 'NO AGENTS', 'DISCONNECTED', 'NO ANSWER'];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let rawOutbound = null;
+let rawInbound  = null;
+let currentAgents = []; // store for export
+let currentInboundMetrics = { totalInboundCalls: 0, totalInboundAnswered: 0, abandonedCount: 0, abandonedPercentFormatted: '0.00', totalInboundMissedNoAnswer: 0 };
+const chartInstances = {};
+
+// ─── FILE UPLOAD HANDLERS ─────────────────────────────────────────────────────
+document.getElementById('outbound-file').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, { header: true, skipEmptyLines: true,
+    complete: (res) => { rawOutbound = res.data; document.getElementById('outbound-filename').textContent = file.name; document.getElementById('outbound-btn').classList.add('loaded'); setStatus(`Outbound loaded: ${res.data.length} rows`, 'success'); },
+    error: () => setStatus('Failed to parse outbound file.', 'error')
+  });
+});
+document.getElementById('inbound-file').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, { header: true, skipEmptyLines: true,
+    complete: (res) => { rawInbound = res.data; document.getElementById('inbound-filename').textContent = file.name; document.getElementById('inbound-btn').classList.add('loaded'); setStatus(`Inbound loaded: ${res.data.length} rows`, 'success'); },
+    error: () => setStatus('Failed to parse inbound file.', 'error')
+  });
+});
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.className = `show ${type || ''}`;
+}
+
+function parseDuration(str) {
+  if (!str || str === '') return 0;
+  str = String(str).trim();
+  const parts = str.split(':').map(Number);
+  if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+  if (parts.length === 2) return (parts[0] * 60) + parts[1];
+  return 0;
+}
+
+function secondsToMMSS(s) {
+  if (!s || isNaN(s)) return '00:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function secondsToHHMM(s) {
+  if (!s || isNaN(s)) return '0h 00m';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m`;
+  return `${m}m ${String(Math.round(s % 60)).padStart(2,'0')}s`;
+}
+
+function normaliseDate(str) {
+  if (!str) return '';
+  str = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+  return str.substring(0, 10);
+}
+
+function normaliseDateTime(str) {
+  if (!str) return '';
+  str = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str;
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}:\d{2})/);
+  if (m) return `${m[3]}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')} ${m[4]}:00`;
+  return str;
+}
+
+function getHourFromDateTime(dtStr) {
+  const timeMatch = dtStr.match(/(\d{2}):\d{2}:\d{2}$/);
+  if (!timeMatch) return 0;
+  return parseInt(timeMatch[1], 10);
+}
+
+function normalisePhone(val) {
+  if (val === null || val === undefined || val === '' || val === 'NaN') return null;
+  let s;
+  const f = parseFloat(String(val).replace('+', ''));
+  if (!isNaN(f)) { s = String(Math.round(f)); } 
+  else { s = String(val).trim().replace(/\D/g, ''); }
+  if (!s || s === '0' || s === 'NaN') return null;
+  if (s.length === 12 && s.startsWith('91')) s = s.substring(2);
+  if (s.length === 13 && s.startsWith('091')) s = s.substring(3);
+  if (s.length > 10) s = s.slice(-10);
+  return s.length >= 7 ? s : null;
+}
+
+function inRange(dateStr, fromYMD, toYMD) {
+  const d = normaliseDate(dateStr);
+  return d >= fromYMD && d <= toYMD;
+}
+
+// ─── ABANDONED LOGIC WITH 6PM RULE ───────────────────────────────────────────
+function computeAbandonedCalls(inRows, outRows) {
+  const inMap = new Map();
+  inRows.forEach(r => {
+    const phone = normalisePhone(r['From']);
+    if (!phone) return;
+    const date = normaliseDate(r['Call Date']);
+    const dt   = normaliseDateTime(r['Call Date']);
+    const disp = (r['Disposition'] || '').trim().toUpperCase();
+    const key  = phone + '|' + date;
+    if (!inMap.has(key)) inMap.set(key, []);
+    inMap.get(key).push({ dt, disp });
+  });
+
+  const outMap = new Map();
+  outRows.forEach(r => {
+    const phone = normalisePhone(r['To']);
+    if (!phone) return;
+    const date = normaliseDate(r['Call Date']);
+    const dt   = normaliseDateTime(r['Call Date']);
+    const disp = (r['Disposition'] || '').trim().toUpperCase();
+    const key  = phone + '|' + date;
+    if (!outMap.has(key)) outMap.set(key, []);
+    outMap.get(key).push({ dt, disp });
+  });
+
+  let abandoned = 0;
+  inMap.forEach((calls, key) => {
+    const missedCalls = calls.filter(c => INBOUND_MISSED_DISPS.includes(c.disp));
+    if (missedCalls.length === 0) return;
+    const sortedMissed = [...missedCalls].sort((a,b) => a.dt.localeCompare(b.dt));
+    const lastMissed = sortedMissed[sortedMissed.length - 1];
+    const lastMissedDT = lastMissed.dt;
+    const lastMissedHour = getHourFromDateTime(lastMissedDT);
+    if (lastMissedHour >= 18) return;
+    const resolvedByInbound = calls.some(c => c.disp === 'ANSWERED' && c.dt > lastMissedDT);
+    if (resolvedByInbound) return;
+    const outCalls = outMap.get(key) || [];
+    const resolvedByOutbound = outCalls.some(c => c.disp === 'ANSWERED' && c.dt > lastMissedDT);
+    if (resolvedByOutbound) return;
+    abandoned++;
+  });
+  return abandoned;
+}
+
+// ─── MAIN LOGIC ───────────────────────────────────────────────────────────────
+function runDashboard() {
+  if (!rawOutbound || !rawInbound) {
+    setStatus('Please upload both Outbound and Inbound CSV files first.', 'error');
+    return;
+  }
+  const fromVal = document.getElementById('date-from').value;
+  const toVal   = document.getElementById('date-to').value;
+  if (!fromVal || !toVal) { setStatus('Please select both From and To dates.', 'error'); return; }
+  if (fromVal > toVal) { setStatus('From date cannot be after To date.', 'error'); return; }
+
+  const outRows = rawOutbound.filter(r => inRange(r['Call Date'], fromVal, toVal));
+  const inRows  = rawInbound.filter(r => inRange(r['Call Date'], fromVal, toVal));
+  if (outRows.length === 0 && inRows.length === 0) {
+    setStatus(`No records found for the selected date range. Try different dates.`, 'error');
+    return;
+  }
+  setStatus(`Processing ${outRows.length} outbound + ${inRows.length} inbound records…`, '');
+
+  const agentMap = {};
+  ALLOWED_AGENTS.forEach(a => { agentMap[a] = { name: a, outHandled:0, outAnswered:0, outOnCallSec:0, inHandled:0, inAnswered:0, inMissed:0, inOnCallSec:0 }; });
+  outRows.forEach(r => {
+    const agent = r['Agent'] ? r['Agent'].trim().toLowerCase() : null;
+    if (!agent || !agentMap[agent]) return;
+    agentMap[agent].outHandled++;
+    if ((r['Disposition'] || '').trim().toUpperCase() === 'ANSWERED') {
+      agentMap[agent].outAnswered++;
+      agentMap[agent].outOnCallSec += parseDuration(r['Duration']);
+    }
+  });
+  inRows.forEach(r => {
+    const agent = r['Agent'] ? r['Agent'].trim().toLowerCase() : null;
+    if (!agent || !agentMap[agent]) return;
+    agentMap[agent].inHandled++;
+    const disp = (r['Disposition'] || '').trim().toUpperCase();
+    if (disp === 'ANSWERED') {
+      agentMap[agent].inAnswered++;
+      agentMap[agent].inOnCallSec += parseDuration(r['Call Duration']);
+    }
+    if (disp === 'NO ANSWER') {
+      agentMap[agent].inMissed++;
+    }
+  });
+
+  currentAgents = Object.values(agentMap).map(a => {
+    const totalHandled   = a.outHandled + a.inHandled;
+    const totalAnswered  = a.outAnswered + a.inAnswered;
+    const totalMissed    = a.inMissed;
+    const totalOnCallSec = a.outOnCallSec + a.inOnCallSec;
+    const avgHandleSec   = totalAnswered > 0 ? Math.round(totalOnCallSec / totalAnswered) : 0;
+    const missedPercent  = totalAnswered > 0 ? (totalMissed / totalAnswered) * 100 : 0;
+    return { name: a.name, totalHandled, totalAnswered, totalMissed, totalOnCallSec, avgHandleSec, missedPercent };
+  }).sort((a,b) => a.name.localeCompare(b.name));
+
+  const totalInboundCalls = inRows.length;
+  const totalInboundAnswered = inRows.filter(r => (r['Disposition'] || '').trim().toUpperCase() === 'ANSWERED').length;
+  const totalInboundMissedNoAnswer = inRows.filter(r => (r['Disposition'] || '').trim().toUpperCase() === 'NO ANSWER').length;
+  const abandonedCount = computeAbandonedCalls(inRows, outRows);
+  const abandonedPercent = totalInboundCalls > 0 ? (abandonedCount / totalInboundCalls) * 100 : 0;
+  const abandonedPercentFormatted = abandonedPercent.toFixed(2);
+
+  currentInboundMetrics = { totalInboundCalls, totalInboundAnswered, abandonedCount, abandonedPercentFormatted, totalInboundMissedNoAnswer };
+
+  renderDateBanner(fromVal, toVal, outRows.length, inRows.length, currentAgents);
+  renderInboundKPIs(totalInboundCalls, totalInboundAnswered, abandonedCount, abandonedPercentFormatted, totalInboundMissedNoAnswer);
+  renderTable(currentAgents);
+  renderCharts(currentAgents);
+
+  document.getElementById('dashboard').classList.add('show');
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('export-btn').style.display = 'flex';
+  
+  const rangeLabel = fromVal === toVal ? fromVal : `${fromVal} → ${toVal}`;
+  setStatus(`Dashboard updated for ${rangeLabel} — Inbound | Abandoned (last missed <6PM): ${abandonedCount} / ${totalInboundCalls} inbound (${abandonedPercentFormatted}%)`, 'success');
+  document.getElementById('header-date').textContent = `Inbound | ${rangeLabel}`;
+}
+
+function renderDateBanner(fromVal, toVal, outCount, inCount, agents) {
+  const fmtDate = (ymd) => new Date(ymd+'T00:00:00').toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+  const isSingle = fromVal === toVal;
+  let displayHTML = isSingle 
+    ? `<span>${new Date(fromVal+'T00:00:00').toLocaleDateString('en-IN', { weekday:'long' })}</span>, ${fmtDate(fromVal)}`
+    : `<span>${fmtDate(fromVal)}</span> &nbsp;→&nbsp; <span>${fmtDate(toVal)}</span>`;
+  document.getElementById('date-display').innerHTML = displayHTML;
+  const presentAgents = agents.filter(a => a.totalHandled > 0).length;
+  document.getElementById('summary-pills').innerHTML = `
+    <div class="pill">Outbound <strong>${outCount}</strong></div>
+    <div class="pill">Inbound <strong>${inCount}</strong></div>
+    <div class="pill">Agents Active <strong>${presentAgents}</strong></div>
+  `;
+}
+
+function renderInboundKPIs(totalInbound, answeredInbound, abandonedCalls, abandonedPercentFormatted, missedNoAnswer) {
+  const cards = [
+    { label: 'Total Inbound Calls', value: totalInbound, sub: 'All inbound records', cls: 'c1' },
+    { label: 'Inbound Answered', value: answeredInbound, sub: `Answer rate ${totalInbound > 0 ? ((answeredInbound/totalInbound)*100).toFixed(2) : 0}%`, cls: 'c2' },
+    { label: 'Abandoned Calls (≤6PM rule)', value: abandonedCalls, sub: 'Last missed <6PM & no resolution', cls: 'c3' },
+    { label: 'Abandoned %', value: `${abandonedPercentFormatted}%`, sub: `of total inbound (${abandonedCalls}/${totalInbound})`, cls: 'c4' },
+    { label: 'Inbound Missed (NO ANSWER)', value: missedNoAnswer, sub: 'Rang but not picked', cls: 'c5' },
+  ];
+  document.getElementById('kpi-strip').innerHTML = cards.map(c => `
+    <div class="kpi-card ${c.cls}">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.value}</div>
+      <div class="kpi-sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+function renderTable(agents) {
+  const maxHandled = Math.max(...agents.map(a => a.totalHandled), 1);
+  const rows = agents.map((a, idx) => {
+    const barW = Math.round((a.totalHandled / maxHandled) * 80);
+    const serialNum = idx + 1;
+    const missedPercentDisplay = a.missedPercent.toFixed(2);
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace; font-size:12px; color:var(--text-dim);">${serialNum}</td>
+      <td><div class="agent-name"><div class="agent-avatar" style="background:${avatarColor(a.name)}">${a.name.substring(0,2).toUpperCase()}</div>${a.name}${a.totalHandled === 0 ? '<span class="ab-badge">AB</span>' : ''}</div></td>
+      <td class="right"><div class="bar-cell"><span>${a.totalHandled}</span><div class="mini-bar" style="width:${barW}px;background:var(--accent2);opacity:0.6"></div></div></td>
+      <td class="right">${a.totalAnswered}</td>
+      <td class="right">${a.totalMissed > 0 ? `<span style="color:var(--gold)">${a.totalMissed}</span>` : '0'}</td>
+      <td class="right">${missedPercentDisplay}%</td>
+      <td class="right">${secondsToHHMM(a.totalOnCallSec)}</td>
+      <td class="right">${a.avgHandleSec > 0 ? secondsToMMSS(a.avgHandleSec) : '—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('agent-tbody').innerHTML = rows;
+}
+
+function avatarColor(name) {
+  const palette = ['#c8102e','#3b82f6','#22c55e','#f97316','#a855f7','#14b8a6','#f0a500','#ec4899','#64748b','#0ea5e9'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+}
+
+const CHART_COLORS = {
+  'chart-handled':  { bg: 'rgba(200,16,46,0.75)', border: '#ff3355' },
+  'chart-answered': { bg: 'rgba(34,197,94,0.75)', border: '#22c55e' },
+  'chart-missed':   { bg: 'rgba(240,165,0,0.75)', border: '#f0a500' },
+  'chart-oncall':   { bg: 'rgba(59,130,246,0.75)', border: '#3b82f6' },
+  'chart-avg':      { bg: 'rgba(168,85,247,0.75)', border: '#a855f7' },
+};
+
+function baseChartOptions(tooltipLabelFn) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#181b22', borderColor: '#1e2230', borderWidth: 1, titleColor: '#e8eaf0', bodyColor: '#9ca3af', padding: 10, callbacks: tooltipLabelFn ? { label: tooltipLabelFn } : {} } },
+    scales: { x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 11 } }, border: { color: '#1e2230' } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 11 } }, border: { color: '#1e2230' }, beginAtZero: true } }
+  };
+}
+
+function renderCharts(agents) {
+  const labels = agents.map(a => a.name);
+  const chartDefs = [
+    { id: 'chart-handled',  data: agents.map(a => a.totalHandled) },
+    { id: 'chart-answered', data: agents.map(a => a.totalAnswered) },
+    { id: 'chart-missed',   data: agents.map(a => a.totalMissed) },
+    { id: 'chart-oncall',   data: agents.map(a => parseFloat((a.totalOnCallSec / 60).toFixed(1))), tooltip: (ctx) => `${ctx.parsed.y} min` },
+    { id: 'chart-avg',      data: agents.map(a => a.avgHandleSec), tooltip: (ctx) => secondsToMMSS(ctx.parsed.y) + ' (MM:SS)' },
+  ];
+  chartDefs.forEach(({ id, data, tooltip }) => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (chartInstances[id]) chartInstances[id].destroy();
+    const colors = CHART_COLORS[id];
+    const bgColors = agents.map(a => a.totalHandled === 0 ? 'rgba(107,114,128,0.2)' : colors.bg);
+    chartInstances[id] = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ data, backgroundColor: bgColors, borderColor: colors.border, borderWidth: 1, borderRadius: 4, borderSkipped: false }] }, options: baseChartOptions(tooltip) });
+  });
+}
+
+// ─── EXPORT TO JPEG ──────────────────────────────────────────────────────────
+async function exportToJPEG() {
+  const exportContainer = document.getElementById('export-container');
+  if (!exportContainer) {
+    setStatus('Nothing to export. Please load data first.', 'error');
+    return;
+  }
+  
+  setStatus('Generating JPEG...', '');
+  
+  try {
+    // Temporarily add a subtle background and padding for better capture
+    const originalBg = exportContainer.style.backgroundColor;
+    const originalPadding = exportContainer.style.padding;
+    exportContainer.style.backgroundColor = '#0a0c10';
+    exportContainer.style.padding = '24px 32px';
+    
+    const canvas = await html2canvas(exportContainer, {
+      scale: 2,
+      backgroundColor: '#0a0c10',
+      logging: false,
+      useCORS: true
+    });
+    
+    // Restore original styles
+    exportContainer.style.backgroundColor = originalBg;
+    exportContainer.style.padding = originalPadding;
+    
+    const link = document.createElement('a');
+    const dateLabel = document.getElementById('header-date').textContent.replace(/\s+/g, '_');
+    link.download = `incheon_dashboard_${dateLabel}.jpeg`;
+    link.href = canvas.toDataURL('image/jpeg', 0.95);
+    link.click();
+    
+    setStatus('JPEG exported successfully!', 'success');
+    setTimeout(() => setStatus('', ''), 3000);
+  } catch (err) {
+    console.error('Export error:', err);
+    setStatus('Failed to generate JPEG. Please try again.', 'error');
+  }
+}
+
+(function() {
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  document.getElementById('date-from').value = ymd;
+  document.getElementById('date-to').value = ymd;
+})();
+</script>
+</body>
+</html>
