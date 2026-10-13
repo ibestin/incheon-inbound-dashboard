@@ -217,6 +217,9 @@
   .hour-col { color: var(--text-mid); font-weight: 600; font-family: 'JetBrains Mono', monospace; }
   .num { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
   .warn { color: var(--amber); font-weight: 600; }
+  tbody tr.sub-row td { background: var(--surface2); font-size: 9.5px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: var(--text-mid); padding: 5px 12px; }
+  tbody tr.sub-row:hover td { background: var(--surface2); }
+  tbody tr.cmp-last td { font-weight: 700; }
   .br { display: block; color: var(--text-dim); font-size: 10.5px; line-height: 1.2; margin-top: 1px; font-weight: 500; }
   td.right { white-space: nowrap; }
   .stack { display: flex; flex-direction: column; align-items: flex-end; }
@@ -362,7 +365,7 @@ function buildBoardHTML(sfx) {
         <div class="card">
           <div class="card-header">
             <div class="card-title">Hourly Occupancy · Inbound</div>
-            <div class="card-note">Calls per hour</div>
+            <div class="card-note">8 AM – 8 PM</div>
           </div>
           <table>
             <thead>
@@ -374,14 +377,14 @@ function buildBoardHTML(sfx) {
 
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Call Trend Through The Day</div>
-            <div class="card-note">Cumulative</div>
+            <div class="card-title">Hourly Comparison · Last 3 Days</div>
+            <div class="card-note">Inbound · 8 AM · 6 PM · 7 PM</div>
           </div>
           <table>
             <thead>
-              <tr><th>Time</th><th class="right">Cumul. Inbound</th><th class="right">Cumul. Answered</th><th class="right">Answer rate</th></tr>
+              <tr><th>Day</th><th class="right">Handled</th><th class="right">Answered</th><th class="right">Answer %</th></tr>
             </thead>
-            <tbody id="hourly-trend-tbody${sfx}"></tbody>
+            <tbody id="hourly-compare-tbody${sfx}"></tbody>
           </table>
         </div>
       </div>`;
@@ -389,7 +392,7 @@ function buildBoardHTML(sfx) {
 document.getElementById('export-container').innerHTML = buildBoardHTML('');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const ALLOWED_AGENTS = ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar','afthad'];
+const ALLOWED_AGENTS = ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar'];
 const INBOUND_MISSED_DISPS = ['BUSY', 'QUEUE TIMEOUT', 'NO AGENTS', 'DISCONNECTED', 'NO ANSWER'];
 const EXCLUDED_GROUP = 'HYPERLOCAL';
 
@@ -641,9 +644,10 @@ function renderHourlyTables(inRows, outRows, fromVal, toVal, sfx = '') {
   const occTbody = document.getElementById('hourly-occupancy-tbody' + sfx);
   let occHTML = '';
   let maxInbound = 0;
-  for (let h = 0; h < 24; h++) { if (hourMap[h].inbound > maxInbound) maxInbound = hourMap[h].inbound; }
+  const OCC_START = 8, OCC_END = 19; // 08:00 to 19:59 (8 AM till 8 PM)
+  for (let h = OCC_START; h <= OCC_END; h++) { if (hourMap[h].inbound > maxInbound) maxInbound = hourMap[h].inbound; }
 
-  for (let h = 0; h < 24; h++) {
+  for (let h = OCC_START; h <= OCC_END; h++) {
     const d = hourMap[h];
     if (d.inbound === 0) continue;
     const hourLabel = `${String(h).padStart(2,'0')}:00`;
@@ -658,28 +662,53 @@ function renderHourlyTables(inRows, outRows, fromVal, toVal, sfx = '') {
   }
   if (!occHTML) occHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-dim); padding:16px;">No inbound calls in selected range</td></tr>';
   occTbody.innerHTML = occHTML;
+}
 
-  const trendTbody = document.getElementById('hourly-trend-tbody' + sfx);
-  let cumulativeInbound = 0;
-  let cumulativeAnswered = 0;
-  let trendHTML = '';
+// ─── HOURLY COMPARISON: last 3 days ending at the To date (8 AM, 7 PM, 8 PM) ──
+const COMPARE_HOURS = [
+  { hour: 8,  label: '08:00 – 08:59 AM' },
+  { hour: 18, label: '06:00 – 06:59 PM' },
+  { hour: 19, label: '07:00 – 07:59 PM' },
+];
 
-  for (let h = 0; h < 24; h++) {
-    const d = hourMap[h];
-    if (d.inbound === 0 && d.answered === 0) continue;
-    cumulativeInbound += d.inbound;
-    cumulativeAnswered += d.answered;
-    const hourLabel = `${String(h).padStart(2,'0')}:00`;
-    const rate = cumulativeInbound > 0 ? ((cumulativeAnswered / cumulativeInbound) * 100).toFixed(1) : '0.0';
-    trendHTML += `<tr>
-      <td class="hour-col">${hourLabel}</td>
-      <td class="right">${cumulativeInbound}</td>
-      <td class="right">${cumulativeAnswered}</td>
-      <td class="right">${rate}%</td>
-    </tr>`;
-  }
-  if (!trendHTML) trendHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-dim); padding:16px;">No inbound calls in selected range</td></tr>';
-  trendTbody.innerHTML = trendHTML;
+function shiftYMD(ymd, deltaDays) {
+  const d = new Date(ymd + 'T00:00:00');
+  d.setDate(d.getDate() + deltaDays);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function renderHourlyComparison(toVal, sfx = '') {
+  const days = [shiftYMD(toVal, -2), shiftYMD(toVal, -1), toVal];
+  const stats = {};
+  days.forEach(d => { stats[d] = {}; COMPARE_HOURS.forEach(h => { stats[d][h.hour] = { handled: 0, answered: 0 }; }); });
+
+  rawInbound.forEach(r => {
+    const date = normaliseDate(r['Call Date']);
+    if (!stats[date]) return;
+    const hour = getHourFromDateTime(normaliseDateTime(r['Call Date']));
+    const slot = stats[date][hour];
+    if (!slot) return;
+    slot.handled++;
+    if ((r['Disposition'] || '').trim().toUpperCase() === 'ANSWERED') slot.answered++;
+  });
+
+  const fmtDay = (ymd) => new Date(ymd + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  let html = '';
+  COMPARE_HOURS.forEach(h => {
+    html += `<tr class="sub-row"><td colspan="4">${h.label}</td></tr>`;
+    days.forEach(d => {
+      const v = stats[d][h.hour];
+      const pct = v.handled > 0 ? ((v.answered / v.handled) * 100).toFixed(1) + '%' : '—';
+      const isLast = d === toVal;
+      html += `<tr${isLast ? ' class="cmp-last"' : ''}>
+        <td class="hour-col">${fmtDay(d)}</td>
+        <td class="right">${v.handled}</td>
+        <td class="right">${v.answered}</td>
+        <td class="right">${pct}</td>
+      </tr>`;
+    });
+  });
+  document.getElementById('hourly-compare-tbody' + sfx).innerHTML = html;
 }
 
 // ─── AGENT AGGREGATION (calculations unchanged) ───────────────────────────────
@@ -759,6 +788,7 @@ function runDashboard() {
   renderTable(currentAgents, dayAgents);
   renderCharts(currentAgents);
   renderHourlyTables(inRows, outRows, fromVal, toVal);
+  renderHourlyComparison(toVal);
 
 
   document.getElementById('dashboard').classList.add('show');
