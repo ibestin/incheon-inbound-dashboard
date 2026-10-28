@@ -5,7 +5,7 @@
 
 /* ─── 1. CONFIG ──────────────────────────────────────────────────────── */
 const CONFIG = {
-  ALLOWED_AGENTS: ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar'],
+  ALLOWED_AGENTS: ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar','afthad'],
   INBOUND_MISSED_DISPS: ['BUSY', 'QUEUE TIMEOUT', 'NO AGENTS', 'DISCONNECTED', 'NO ANSWER'],
   EXCLUDED_GROUP: 'HYPERLOCAL',
   ABANDONED_CUTOFF_HOUR: 18,
