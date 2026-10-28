@@ -15,7 +15,11 @@ const CONFIG = {
   DISP_NO_ANSWER: 'NO ANSWER',
   OCCUPANCY_HOURS: { start: 8, end: 19 },   // inclusive, shown in the hourly occupancy table
   COMPARE_HOURS: [8, 18, 19],               // hours shown in the hourly comparison table
-  COMPARE_DAYS: 3,                          // selected 'To' date plus the previous N-1 days
+  COMPARE_DAYS: 3,                          // last working day of the range plus the previous N-1 working days
+  EXCLUDED_WEEKDAYS: [0],                   // 0 = Sunday. Rows on these days are ignored everywhere
+  RATE_GOOD: 90,                            // answer rate (%) at/above which the chip is green
+  RATE_WARN: 75,                            // at/above this it is amber, below it is red
+  CHART_COLORS: { handled: '#C8102E', answered: '#1E8E3E', missed: '#F29900', onCall: '#1A73E8', aht: '#7E57C2' },
   COLUMNS: {
     inbound:  { critical: ['Call Date', 'Disposition'], expected: ['From', 'Group', 'Agent', 'Call Duration'] },
     outbound: { critical: ['Call Date', 'Disposition'], expected: ['To', 'Agent', 'Duration'] }
@@ -124,6 +128,30 @@ function shiftYMD(ymd, deltaDays) {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 
+/** True when the date falls on a weekday listed in CONFIG.EXCLUDED_WEEKDAYS (Sundays by default). */
+function isExcludedDay(ymd) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return !isNaN(d) && CONFIG.EXCLUDED_WEEKDAYS.includes(d.getUTCDay());
+}
+
+/** Latest non-excluded date on or before `ymd`, never going earlier than `floorYMD`. */
+function lastWorkingDay(ymd, floorYMD) {
+  let d = ymd;
+  while (isExcludedDay(d) && d > floorYMD) d = shiftYMD(d, -1);
+  return d;
+}
+
+/** The last CONFIG.COMPARE_DAYS working days ending at `toYMD` (oldest first). */
+function pickCompareDays(toYMD) {
+  const days = [];
+  let cursor = toYMD;
+  for (let guard = 0; days.length < CONFIG.COMPARE_DAYS && guard < 60; guard++) {
+    if (!isExcludedDay(cursor)) days.unshift(cursor);
+    cursor = shiftYMD(cursor, -1);
+  }
+  return days;
+}
+
 const fmtDateLong = (ymd) =>
   new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
 const fmtDayShort = (ymd) =>
@@ -142,7 +170,19 @@ function avatarColor(name) {
   return CONFIG.AVATAR_PALETTE[Math.abs(hash) % CONFIG.AVATAR_PALETTE.length];
 }
 
+function rateClass(num, den) {
+  if (!(den > 0)) return 'rate-none';
+  const p = (num / den) * 100;
+  if (p >= CONFIG.RATE_GOOD) return 'rate-good';
+  if (p >= CONFIG.RATE_WARN) return 'rate-ok';
+  return 'rate-bad';
+}
+
 const pct = (num, den, digits = 2) => (den > 0 ? ((num / den) * 100).toFixed(digits) : (0).toFixed(digits));
+
+/** Colour-coded answer-rate chip, e.g. <span class="rate rate-good">96.5%</span>. */
+const rateChip = (num, den, digits = 0) =>
+  `<span class="rate ${rateClass(num, den)}">${den > 0 ? pct(num, den, digits) + '%' : '—'}</span>`;
 
 /* ─── 3. DATA PREPARATION (every row is parsed once, at upload) ───────── */
 function prepareRows(rows, kind) {
@@ -152,10 +192,12 @@ function prepareRows(rows, kind) {
   const records = [];
   const unknown = new Map();
   let skipped = 0;
+  let excluded = 0;
 
   for (const r of rows) {
     const dt = parseDateTime(r['Call Date']);
     if (!dt) { skipped++; continue; }
+    if (isExcludedDay(dt.date)) { excluded++; continue; }
     const disp = String(r['Disposition'] ?? '').trim().toUpperCase();
     const agent = String(r['Agent'] ?? '').trim().toLowerCase();
     const rec = {
@@ -168,7 +210,7 @@ function prepareRows(rows, kind) {
     if (agent && !ALLOWED_AGENT_SET.has(agent)) unknown.set(agent, (unknown.get(agent) || 0) + 1);
     records.push(rec);
   }
-  return { records, skipped, unknown };
+  return { records, skipped, unknown, excluded };
 }
 
 function buildDataset(records, skipped, unknown, fileName) {
@@ -379,7 +421,7 @@ function renderAgentTable(agents, dayAgents, sfx = '') {
   $('agent-tbody' + sfx).innerHTML = agents.map((a, idx) => {
     const d = dayByName.get(a.name) || empty;
     const barW = Math.round((a.totalHandled / maxHandled) * 50);
-    return `<tr>
+    return `<tr${a.totalHandled === 0 ? ' class="is-away"' : ''}>
       <td class="num" style="color:var(--md-text-variant);">${idx + 1}</td>
       <td class="left"><div class="agent-name"><div class="agent-avatar" style="background:${avatarColor(a.name)}">${a.name.substring(0, 2)}</div>${a.name}${a.totalHandled === 0 ? '<span class="ab-badge">AB</span>' : ''}</div></td>
       <td class="right"><div class="bar-cell"><span class="stack"><span>${a.totalHandled}</span>${br(d.totalHandled)}</span><div class="mini-bar" style="width:${barW}px"></div></div></td>
@@ -402,13 +444,13 @@ function renderHourlyOccupancy(inRows, sfx = '') {
   for (let h = start; h <= end; h++) {
     const d = hours[h];
     if (d.inbound === 0) continue;
-    const barWidth = maxInbound > 0 ? Math.round((d.inbound / maxInbound) * 40) : 0;
+    const barWidth = maxInbound > 0 ? Math.round((d.inbound / maxInbound) * 100) : 0;
     html += `<tr>
       <td class="hour-col">${pad2(h)}:00</td>
       <td class="right">${d.inbound}</td>
       <td class="right">${d.answered}</td>
       <td class="right">${d.missed > 0 ? `<span class="warn">${d.missed}</span>` : '0'}</td>
-      <td class="num"><span class="bar-inline" style="width:${barWidth}px"></span>${pct(d.answered, d.inbound, 0)}%</td>
+      <td><div class="rate-wrap"><span class="bar-track" title="Bar = share of the busiest hour"><span class="bar-fill" style="width:${barWidth}%"></span></span>${rateChip(d.answered, d.inbound)}</div></td>
     </tr>`;
   }
   $('hourly-occupancy-tbody' + sfx).innerHTML =
@@ -416,8 +458,7 @@ function renderHourlyOccupancy(inRows, sfx = '') {
 }
 
 function renderHourlyComparison(toVal, sfx = '') {
-  const days = [];
-  for (let i = CONFIG.COMPARE_DAYS - 1; i >= 0; i--) days.push(shiftYMD(toVal, -i));
+  const days = pickCompareDays(toVal);
 
   const stats = new Map();   // date -> hour -> {handled, answered}
   for (const day of days) {
@@ -436,11 +477,11 @@ function renderHourlyComparison(toVal, sfx = '') {
     html += `<tr class="sub-row"><td colspan="4">${hourRangeLabel(h)}</td></tr>`;
     for (const day of days) {
       const v = stats.get(day).get(h);
-      html += `<tr${day === toVal ? ' class="cmp-last"' : ''}>
+      html += `<tr${day === days[days.length - 1] ? ' class="cmp-last"' : ''}>
         <td class="hour-col">${fmtDayShort(day)}</td>
         <td class="right">${v.handled}</td>
         <td class="right">${v.answered}</td>
-        <td class="right">${v.handled > 0 ? pct(v.answered, v.handled, 1) + '%' : '—'}</td>
+        <td class="right">${rateChip(v.answered, v.handled, 1)}</td>
       </tr>`;
     }
   }
@@ -464,7 +505,7 @@ function baseChartOptions(opts = {}) {
     },
     scales: {
       x: { grid: { display: false }, border: { display: false } },
-      y: { grid: { color: '#EAE1E1' }, ticks: { callback: opts.yTick || undefined }, border: { display: false }, beginAtZero: true }
+      y: { grid: { color: '#F0E8E8' }, ticks: { callback: opts.yTick || undefined }, border: { display: false }, beginAtZero: true }
     }
   };
 }
@@ -478,15 +519,16 @@ function makeChart(id, config) {
 
 function renderCharts(agents) {
   const labels = agents.map((a) => a.name);
+  const CC = CONFIG.CHART_COLORS;
 
   makeChart('chart-calls', {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        { label: 'Handled',  data: agents.map((a) => a.totalHandled),  backgroundColor: '#FFDAD5', hoverBackgroundColor: '#C8102E', borderRadius: 6, maxBarThickness: 24 },
-        { label: 'Answered', data: agents.map((a) => a.totalAnswered), backgroundColor: '#C4EED0', hoverBackgroundColor: '#16A34A', borderRadius: 6, maxBarThickness: 24 },
-        { label: 'Missed',   data: agents.map((a) => a.totalMissed),   backgroundColor: '#FFDF99', hoverBackgroundColor: '#D97706', borderRadius: 6, maxBarThickness: 24 }
+        { label: 'Handled',  data: agents.map((a) => a.totalHandled),  backgroundColor: CC.handled,  borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
+        { label: 'Answered', data: agents.map((a) => a.totalAnswered), backgroundColor: CC.answered, borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
+        { label: 'Missed',   data: agents.map((a) => a.totalMissed),   backgroundColor: CC.missed,   borderRadius: 6, borderSkipped: false, maxBarThickness: 22 }
       ]
     },
     options: baseChartOptions({ legend: true })
@@ -494,13 +536,13 @@ function renderCharts(agents) {
 
   makeChart('chart-oncall', {
     type: 'bar',
-    data: { labels, datasets: [{ data: agents.map((a) => parseFloat((a.totalOnCallSec / 60).toFixed(1))), backgroundColor: '#D3E3FD', hoverBackgroundColor: '#2563EB', borderRadius: 6, maxBarThickness: 32 }] },
+    data: { labels, datasets: [{ data: agents.map((a) => parseFloat((a.totalOnCallSec / 60).toFixed(1))), backgroundColor: CC.onCall, borderRadius: 6, borderSkipped: false, maxBarThickness: 30 }] },
     options: baseChartOptions({ tooltip: (ctx) => `${ctx.parsed.y} min` })
   });
 
   makeChart('chart-avg', {
     type: 'bar',
-    data: { labels, datasets: [{ data: agents.map((a) => a.avgHandleSec), backgroundColor: '#EADDFF', hoverBackgroundColor: '#7C3AED', borderRadius: 6, maxBarThickness: 32 }] },
+    data: { labels, datasets: [{ data: agents.map((a) => a.avgHandleSec), backgroundColor: CC.aht, borderRadius: 6, borderSkipped: false, maxBarThickness: 30 }] },
     options: baseChartOptions({
       tooltip: (ctx) => secondsToMMSS(ctx.parsed.y) + ' (MM:SS)',
       yTick: (v) => secondsToMMSS(v)
@@ -579,7 +621,9 @@ function onFileParsed(kind, file, input, res) {
 
   const prepared = prepareRows(res.data, kind);
   if (!prepared.records.length) {
-    showToast(`${label} file has no rows with a readable Call Date.`, 'error');
+    showToast(prepared.excluded
+      ? `${label} file has only Sunday rows, which are excluded.`
+      : `${label} file has no rows with a readable Call Date.`, 'error');
     input.value = '';
     return;
   }
@@ -587,6 +631,7 @@ function onFileParsed(kind, file, input, res) {
   const notices = [];
   const missingExpected = spec.expected.filter((c) => !fields.includes(c));
   if (missingExpected.length) notices.push(`${label}: column(s) not found — ${missingExpected.join(', ')}. Related figures may be zero or incomplete.`);
+  if (prepared.excluded) notices.push(`${label}: ${prepared.excluded} Sunday row(s) excluded from all calculations.`);
   if (prepared.skipped) notices.push(`${label}: ${prepared.skipped} row(s) skipped because the Call Date could not be read.`);
   if (prepared.unknown.size) {
     const n = [...prepared.unknown.values()].reduce((a, b) => a + b, 0);
@@ -630,7 +675,7 @@ function runDashboard() {
     const outRows = rowsInRange(state.outbound, from, to);
     const inRows = rowsInRange(state.inbound, from, to);
     if (!outRows.length && !inRows.length) {
-      showToast('No records found for the selected date range. Try different dates.', 'error');
+      showToast('No records found for the selected date range (Sundays are excluded). Try different dates.', 'error');
       return;
     }
 
@@ -638,18 +683,19 @@ function runDashboard() {
     state.agents = agents;
 
     const rangeSummary = summariseInbound(inRows, outRows);
-    const dayOut = rowsOnDate(state.outbound, to);
-    const dayIn = rowsOnDate(state.inbound, to);
-    const daySummary = from === to ? rangeSummary : summariseInbound(dayIn, dayOut);
-    const dayAgents = from !== to ? buildAgents(dayOut, dayIn) : null;
+    const lastDay = lastWorkingDay(to, from);   // the 'To' date, or the nearest working day before it
+    const dayOut = rowsOnDate(state.outbound, lastDay);
+    const dayIn = rowsOnDate(state.inbound, lastDay);
+    const daySummary = from === lastDay ? rangeSummary : summariseInbound(dayIn, dayOut);
+    const dayAgents = from !== lastDay ? buildAgents(dayOut, dayIn) : null;
 
     renderDateBanner(from, to, outRows.length, inRows.length, agents);
     renderKPIs(rangeSummary, daySummary);
-    $('agent-note').textContent = dayAgents ? `Range (${to})` : 'Inbound + Outbound';
+    $('agent-note').textContent = dayAgents ? `Range (${lastDay})` : 'Inbound + Outbound';
     renderAgentTable(agents, dayAgents);
     renderCharts(agents);
     renderHourlyOccupancy(inRows);
-    renderHourlyComparison(to);
+    renderHourlyComparison(lastDay);
 
     $('dashboard').classList.add('show');
     $('empty-state').style.display = 'none';
@@ -693,5 +739,5 @@ if (typeof document !== 'undefined') {
 
 // Lets the pure logic be tested in Node; harmless in the browser.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseDateTime, normalisePhone, parseDuration, prepareRows, computeAbandoned, summariseInbound, buildAgents, computeHourly, shiftYMD };
+  module.exports = { parseDateTime, normalisePhone, parseDuration, prepareRows, computeAbandoned, summariseInbound, buildAgents, computeHourly, shiftYMD, isExcludedDay, lastWorkingDay, pickCompareDays, rateClass, CONFIG };
 }
