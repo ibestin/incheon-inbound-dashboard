@@ -1,4 +1,3 @@
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Incheon Kia — Contact Centre Dashboard
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -35,16 +34,59 @@ const CONFIG = {
     outbound: {
       critical: ['Call Date', 'Disposition'],
       expected: ['To', 'Agent', 'Duration']
+    },
+    status: {
+      critical: ['Agent', 'Status', 'Time', 'Total Duration'],
+      expected: []
     }
-  }
+  },
+
+  /* Agent Status Time table (detailed agent performance report) ------------
+     STATUS_COLUMNS : table columns, in display order
+                      kind 'time'  -> total time in that status
+                      kind 'avg'   -> total time / agent's answered calls on the
+                                      status file's date; denom lists which call
+                                      files count (['inbound'] or
+                                      ['inbound', 'outbound'])
+                                      (highlight: true adds red / amber dots
+                                       for the highest / 2nd highest agent)
+                      kind 'count' -> a count (key must be filled in code)
+     STATUS_MAP     : raw Status value (upper-case) -> time bucket key
+     STATUS_IGNORED : raw Status values deliberately not tracked
+     LONG_PAUSE_SEC : a PAUSED row longer than this counts as a long pause
+     Any other status seen for a tracked agent is reported in the status bar. */
+  STATUS_COLUMNS: [
+    { key: 'ringing',   label: 'Avg Ringing',        kind: 'avg', highlight: true, denom: ['inbound'] },
+    { key: 'closure',   label: 'Avg Closure',        kind: 'avg', highlight: true, denom: ['inbound', 'outbound'] },
+    { key: 'paused',    label: 'Paused',             kind: 'time' },
+    { key: 'longPause', label: 'Long Pauses (>10m)', kind: 'count' },
+    { key: 'break',     label: 'Break',              kind: 'time' },
+    { key: 'available', label: 'Available',          kind: 'time' }
+  ],
+  STATUS_MAP: {
+    RINGING: 'ringing',
+    AVAILABLE: 'available',
+    PAUSED: 'paused',
+    PAUSE: 'paused',
+    BREAK: 'break',
+    CLOSURE: 'closure'
+  },
+  STATUS_IGNORED: ['DIALING', 'UNAVAILABLE', 'DISCONNECTED', 'ONCALL', 'ONOCALL'],
+  LONG_PAUSE_SEC: 600,
+
+  TOAST_MS: 1000,
+  TOAST_ERROR_MS: 4000
 };
 
 const ALLOWED_AGENT_SET = new Set(CONFIG.ALLOWED_AGENTS);
 const MISSED_SET = new Set(CONFIG.INBOUND_MISSED_DISPS);
+const STATUS_LOOKUP = new Map(Object.entries(CONFIG.STATUS_MAP));
+const STATUS_IGNORED_SET = new Set(CONFIG.STATUS_IGNORED);
 
 const state = {
   inbound: null,
   outbound: null,
+  status: null,
   agents: [],
   charts: {}
 };
@@ -89,6 +131,17 @@ function secondsToHHMM(s) {
   if (h > 0) return `${h}h ${pad2(m)}m`;
 
   return `${m}m ${pad2(Math.round(s % 60))}s`;
+}
+
+function secondsToHMS(s) {
+  if (!s || isNaN(s)) return '00:00:00';
+
+  const total = Math.round(s);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+
+  return `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
 }
 
 /* ─── DATE PARSING ────────────────────────────────────────────────────── */
@@ -406,6 +459,114 @@ function rowsInRange(ds, from, to) {
 
 const rowsOnDate = (ds, ymd) => ds.byDate.get(ymd) || [];
 
+/**
+ * The agent status report uses DD/MM/YYYY HH:MM:SS (the call reports use
+ * MM/DD/YYYY), so it gets its own date reader. ISO dates are also accepted.
+ * Returns 'YYYY-MM-DD' or null.
+ */
+function parseStatusDate(raw) {
+  if (raw === null || raw === undefined) return null;
+
+  const s = String(raw).trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+
+  if (m) {
+    const d = +m[1];
+    const mo = +m[2];
+    const y = +m[3];
+
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+
+    return `${y}-${pad2(mo)}-${pad2(d)}`;
+  }
+
+  const iso = parseDateTime(s);
+
+  return iso ? iso.date : null;
+}
+
+/**
+ * Agent status report (single-day file).
+ * Sums "Total Duration" per tracked agent per status column.
+ * - Extension-number rows and any non-tracked agents are dropped.
+ * - Missing / malformed durations count as 0.
+ * - Statuses outside STATUS_MAP / STATUS_IGNORED are collected in `unknown`.
+ * The whole file is summed; the date range selector does not apply.
+ */
+function prepareStatusRows(rows) {
+  const keys = CONFIG.STATUS_COLUMNS.map((c) => c.key);
+  const totals = new Map(
+    CONFIG.ALLOWED_AGENTS.map((name) => {
+      const rec = { name, rows: 0 };
+      keys.forEach((k) => { rec[k] = 0; });
+      return [name, rec];
+    })
+  );
+
+  const dates = new Set();
+  const unknown = new Map();
+
+  let used = 0;
+  let otherAgents = 0;
+  let ignored = 0;
+
+  for (const r of rows) {
+    const agent = String(r['Agent'] ?? '').trim().toLowerCase();
+    const rec = totals.get(agent);
+
+    if (!rec) {
+      otherAgents++;
+      continue;
+    }
+
+    const st = String(r['Status'] ?? '').trim().toUpperCase();
+    const key = STATUS_LOOKUP.get(st);
+
+    if (!key) {
+      if (STATUS_IGNORED_SET.has(st)) {
+        ignored++;
+      } else if (st) {
+        unknown.set(st, (unknown.get(st) || 0) + 1);
+      }
+      continue;
+    }
+
+    const dur = parseDuration(r['Total Duration']);
+
+    rec[key] += dur;
+    rec.rows++;
+    used++;
+
+    if (key === 'paused' && dur > CONFIG.LONG_PAUSE_SEC) {
+      rec.longPause++;
+    }
+
+    const day = parseStatusDate(r['Time']);
+    if (day) dates.add(day);
+  }
+
+  const sortedDates = [...dates].sort();
+
+  let dateLabel = 'Date n/a';
+
+  if (sortedDates.length === 1) {
+    dateLabel = fmtDateLong(sortedDates[0]);
+  } else if (sortedDates.length > 1) {
+    dateLabel = `${fmtDateLong(sortedDates[0])} → ${fmtDateLong(sortedDates[sortedDates.length - 1])}`;
+  }
+
+  return {
+    totals,
+    unknown,
+    used,
+    otherAgents,
+    ignored,
+    dateLabel,
+    dates: sortedDates,
+    multiDate: sortedDates.length > 1
+  };
+}
+
 
 /* ─── 4. METRICS ──────────────────────────────────────────────────────── */
 
@@ -570,6 +731,10 @@ function buildAgents(outRows, inRows) {
 /* ─── 5. RENDERING ────────────────────────────────────────────────────── */
 
 function buildBoardHTML(sfx = '') {
+  const statusHeaders = CONFIG.STATUS_COLUMNS
+    .map((c) => `<th class="right">${c.label}</th>`)
+    .join('');
+
   return `
     <div class="date-banner">
       <div class="date-display" id="date-display${sfx}">—</div>
@@ -645,6 +810,27 @@ function buildBoardHTML(sfx = '') {
         </table>
       </div>
 
+    </div>
+
+    <div class="status-card-wrap" id="status-card-wrap${sfx}" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Agent Status Time</div>
+          <div class="card-note" id="status-note${sfx}">—</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Agent</th>
+              ${statusHeaders}
+            </tr>
+          </thead>
+
+          <tbody id="status-tbody${sfx}"></tbody>
+        </table>
+      </div>
     </div>`;
 }
 
@@ -787,6 +973,143 @@ function renderAgentTable(agents, dayAgents, sfx = '') {
         </td>
       </tr>`;
   }).join('');
+}
+
+/**
+ * Answered calls per tracked agent on the given dates, counted from the listed
+ * call files (e.g. ['inbound'] or ['inbound', 'outbound']).
+ * Returns null when any listed file is not loaded.
+ */
+function answeredByAgent(dates, sources) {
+  if (sources.some((src) => !state[src])) return null;
+
+  const counts = new Map(CONFIG.ALLOWED_AGENTS.map((n) => [n, 0]));
+
+  for (const src of sources) {
+    for (const d of dates) {
+      for (const r of rowsOnDate(state[src], d)) {
+        if (r.disp !== CONFIG.DISP_ANSWERED) continue;
+
+        if (counts.has(r.agent)) {
+          counts.set(r.agent, counts.get(r.agent) + 1);
+        }
+      }
+    }
+  }
+
+  return counts;
+}
+
+/**
+ * Rank positive values (highest first, ties share a rank).
+ * Returns Map(name -> 'red' | 'amber') for the top two distinct values.
+ */
+function rankDots(valuesByName) {
+  const distinct = [...new Set(
+    [...valuesByName.values()].filter((v) => v !== null && v > 0)
+  )].sort((x, y) => y - x);
+
+  const out = new Map();
+
+  valuesByName.forEach((v, name) => {
+    if (v === null || v <= 0) return;
+
+    if (v === distinct[0]) out.set(name, 'red');
+    else if (v === distinct[1]) out.set(name, 'amber');
+  });
+
+  return out;
+}
+
+function renderStatusTable(sfx = '') {
+  const wrap = $('status-card-wrap' + sfx);
+
+  if (!wrap) return;
+
+  if (!state.status) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  const cols = CONFIG.STATUS_COLUMNS;
+
+  const agents = [...state.status.totals.values()]
+    .sort((x, y) => x.name.localeCompare(y.name));
+
+  const statusDates = state.status.dates || [];
+
+  // Per-agent average (seconds) for every 'avg' column; null = not available
+  const avgs = new Map();
+  const dots = new Map();
+
+  let missingCalls = false;
+
+  cols.filter((c) => c.kind === 'avg').forEach((c) => {
+    const byName = new Map();
+    const answered = answeredByAgent(statusDates, c.denom);
+
+    if (!answered) missingCalls = true;
+
+    agents.forEach((a) => {
+      const n = answered ? answered.get(a.name) || 0 : 0;
+
+      byName.set(a.name, n > 0 ? a[c.key] / n : null);
+    });
+
+    avgs.set(c.key, byName);
+
+    if (c.highlight) dots.set(c.key, rankDots(byName));
+  });
+
+  $('status-note' + sfx).textContent = missingCalls
+    ? `${state.status.dateLabel} · Load inbound & outbound CSV for averages`
+    : `${state.status.dateLabel} · Ringing ÷ inbound answered · Closure ÷ in+out answered`;
+
+  $('status-tbody' + sfx).innerHTML = agents.map((a, idx) => {
+    const hasData = a.rows > 0;
+
+    const cells = cols.map((c) => {
+      let body;
+
+      if (c.kind === 'avg') {
+        const v = avgs.get(c.key).get(a.name);
+        const dot = dots.has(c.key) ? dots.get(c.key).get(a.name) : null;
+
+        body = v === null
+          ? '<span class="zero">—</span>'
+          : `${dot ? `<span class="rank-dot ${dot}"></span>` : ''}${secondsToHMS(v)}`;
+      } else if (c.kind === 'count') {
+        body = a[c.key] > 0
+          ? `<span class="warn">${a[c.key]}</span>`
+          : '<span class="zero">0</span>';
+      } else {
+        body = a[c.key] > 0
+          ? secondsToHMS(a[c.key])
+          : `<span class="zero">${secondsToHMS(0)}</span>`;
+      }
+
+      return `<td class="right">${body}</td>`;
+    }).join('');
+
+    return `
+      <tr>
+        <td class="num" style="color:var(--text-dim);">${idx + 1}</td>
+
+        <td>
+          <div class="agent-name">
+            <div class="agent-avatar" style="background:${avatarColor(a.name)}">
+              ${a.name.substring(0, 2)}
+            </div>
+            ${a.name}
+            ${hasData ? '' : '<span class="ab-badge">AB</span>'}
+          </div>
+        </td>
+
+        ${cells}
+      </tr>`;
+  }).join('');
+
+  wrap.style.display = '';
 }
 
 function renderHourlyOccupancy(inRows, sfx = '') {
@@ -1089,19 +1412,35 @@ async function exportToJPEG(containerId = 'export-container') {
   }
 }
 
-function setStatus(msg, type = '') {
-  const el = $('status-bar');
+let toastTimer = null;
 
-  if (!el) return;
+/**
+ * Shows a short toast (top-right) instead of a permanent bar.
+ * info / success disappear after CONFIG.TOAST_MS; errors stay a little longer
+ * (CONFIG.TOAST_ERROR_MS) so they can be read. Empty msg hides it at once.
+ */
+function setStatus(msg, type = '') {
+  let el = $('toast');
+
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    document.body.appendChild(el);
+  }
+
+  clearTimeout(toastTimer);
 
   if (!msg) {
-    el.textContent = '';
     el.className = '';
     return;
   }
 
   el.textContent = msg;
   el.className = `show ${type}`;
+
+  toastTimer = setTimeout(() => {
+    el.className = '';
+  }, type === 'error' ? CONFIG.TOAST_ERROR_MS : CONFIG.TOAST_MS);
 }
 
 
@@ -1138,6 +1477,57 @@ function onFileParsed(kind, file, input, res) {
   );
 }
 
+function onStatusFileParsed(file, input, res) {
+  const spec = CONFIG.COLUMNS.status;
+  const fields = (res.meta && res.meta.fields) || [];
+
+  const missing = spec.critical.filter((c) => !fields.includes(c));
+
+  if (missing.length) {
+    setStatus(`Agent status file is missing columns: ${missing.join(', ')}`, 'error');
+
+    input.value = '';
+    return;
+  }
+
+  const prepared = prepareStatusRows(res.data);
+
+  if (prepared.used === 0) {
+    setStatus('Agent status file has no usable rows for the tracked agents.', 'error');
+
+    input.value = '';
+    return;
+  }
+
+  state.status = prepared;
+
+  $('status-filename').textContent = file.name;
+  $('status-btn').classList.add('loaded');
+
+  let msg = `Agent status loaded: ${prepared.used} rows | ${prepared.otherAgents} rows from other agents/extensions skipped`;
+
+  if (prepared.unknown.size) {
+    const list = [...prepared.unknown.entries()]
+      .map(([k, v]) => `${k} (${v})`)
+      .join(', ');
+
+    msg += ` | Unmapped statuses: ${list}`;
+  }
+
+  if (prepared.multiDate) {
+    msg += ' | Note: file spans multiple dates, all summed';
+  }
+
+  setStatus(msg, 'success');
+
+  // If the dashboard is already on screen, refresh the table straight away
+  const dash = $('dashboard');
+
+  if (dash && dash.classList.contains('show')) {
+    renderStatusTable();
+  }
+}
+
 function handleFileSelected(kind, input) {
   const file = input.files && input.files[0];
 
@@ -1148,7 +1538,11 @@ function handleFileSelected(kind, input) {
     skipEmptyLines: true,
     transformHeader: (h) => h.trim(),
 
-    complete: (res) => onFileParsed(kind, file, input, res),
+    complete: (res) => (
+      kind === 'status'
+        ? onStatusFileParsed(file, input, res)
+        : onFileParsed(kind, file, input, res)
+    ),
 
     error: () => setStatus(`Failed to parse ${kind} file.`, 'error')
   });
@@ -1215,6 +1609,7 @@ function runDashboard() {
     renderCharts(agents);
     renderHourlyOccupancy(inRows);
     renderHourlyComparison(lastDay);
+    renderStatusTable();
 
     $('dashboard').classList.add('show');
     $('empty-state').style.display = 'none';
@@ -1248,6 +1643,10 @@ function init() {
 
   $('inbound-file').addEventListener('change', (e) =>
     handleFileSelected('inbound', e.target)
+  );
+
+  $('status-file').addEventListener('change', (e) =>
+    handleFileSelected('status', e.target)
   );
 
   const runBtn = document.querySelector('.run-btn');
