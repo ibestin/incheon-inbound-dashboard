@@ -40,6 +40,13 @@
         <span class="fname" id="inbound-filename">Choose inbound CSV…</span>
       </div>
     </div>
+    <div class="file-input-wrap">
+      <input type="file" id="status-file" accept=".csv">
+      <div class="file-btn" id="status-btn">
+        <span class="tag tag-sts">STS</span>
+        <span class="fname" id="status-filename">Choose agent status CSV…</span>
+      </div>
+    </div>
     <div class="divider"></div>
     <div class="date-range-row">
       <input type="date" id="date-from">
@@ -57,8 +64,6 @@
 </div>
 
 <main>
-  <div id="status-bar"></div>
-
   <div id="dashboard">
     <div class="section-title"><span>Selected Range</span></div>
     
@@ -85,7 +90,7 @@
   <div id="empty-state" class="empty-state">
     <div class="empty-icon">📊</div>
     <div class="empty-title">No Data Loaded</div>
-    <div class="empty-sub">Upload both CSV files, select a date range, then click APPLY.</div>
+    <div class="empty-sub">Upload the inbound and outbound CSV files (agent status CSV is optional), select a date range, then click APPLY.</div>
   </div>
 </main>
 
