@@ -74,6 +74,7 @@ body {
 }
 .tag-out { background: var(--accent-soft); color: var(--accent); }
 .tag-in  { background: var(--blue-soft); color: var(--blue); }
+.tag-sts { background: var(--purple-soft); color: var(--purple); }
 .file-btn span.fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .divider { width: 1px; height: 24px; background: var(--border); }
@@ -114,14 +115,19 @@ input[type="date"]:hover, input[type="date"]:focus { border-color: var(--accent)
 /* ── MAIN ─────────────────────────────────────────────────────────────── */
 main { padding: 14px 20px 20px; width: 100%; }
 
-#status-bar {
-  display: none; font-size: 11px; font-family: 'JetBrains Mono', monospace;
-  padding: 7px 12px; border-radius: 8px; margin-bottom: 12px;
+/* toast messages (replaces the old in-page status bar) */
+#toast {
+  position: fixed; top: 64px; right: 20px; z-index: 200; max-width: 440px;
+  padding: 9px 14px; border-radius: 8px; font-size: 11px;
+  font-family: 'JetBrains Mono', monospace; line-height: 1.4;
   background: var(--surface); border: 1px solid var(--border); color: var(--text-mid);
+  box-shadow: 0 6px 20px rgba(21, 26, 39, 0.12);
+  opacity: 0; transform: translateY(-6px); pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
 }
-#status-bar.show { display: block; }
-#status-bar.error { color: var(--red); border-color: #f5c2c2; background: #fef2f2; }
-#status-bar.success { color: var(--green); border-color: #bde5c9; background: var(--green-soft); }
+#toast.show { opacity: 1; transform: none; }
+#toast.error { color: var(--red); border-color: #f5c2c2; background: #fef2f2; }
+#toast.success { color: var(--green); border-color: #bde5c9; background: var(--green-soft); }
 
 #dashboard { display: none; }
 #dashboard.show { display: block; }
@@ -170,6 +176,13 @@ main { padding: 14px 20px 20px; width: 100%; }
 .card-header { padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; }
 .card-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text); }
 .card-note { font-size: 10px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+
+/* agent status time card */
+.status-card-wrap { margin-bottom: 14px; }
+.zero { color: var(--text-dim); }
+.rank-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+.rank-dot.red { background: var(--red); }
+.rank-dot.amber { background: var(--amber); }
 
 /* tables */
 table { width: 100%; border-collapse: collapse; }
