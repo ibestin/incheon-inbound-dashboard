@@ -6,7 +6,7 @@
 /* ─── 1. CONFIG ───────────────────────────────────────────────────────── */
 
 const CONFIG = {
-  ALLOWED_AGENTS: ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar', 'afthad'],
+  ALLOWED_AGENTS: ['dhanil', 'sreerag', 'athul', 'nigel', 'sijin', 'akhil_ar', 'afthad', 'robin'],
   INBOUND_MISSED_DISPS: ['BUSY', 'QUEUE TIMEOUT', 'NO AGENTS', 'DISCONNECTED', 'NO ANSWER'],
   EXCLUDED_GROUP: 'HYPERLOCAL',
   EXCLUDED_PHONE_PREFIXES: ['9179470'],
