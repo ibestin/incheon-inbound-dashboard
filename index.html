@@ -8,11 +8,11 @@
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   
   <!-- Fonts & Styles -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="outbound.css">
 </head>
 <body>
 
@@ -21,11 +21,21 @@
     <div class="brand-mark">IK</div>
     <div>
       <div class="brand-name">INCHEON KIA</div>
-      <div class="brand-sub">Contact Centre · Abandoned ≤6PM</div>
+      <div class="brand-sub">Contact Centre</div>
     </div>
   </div>
 
+  <div class="ob-tabs">
+    <button class="ob-tab active" data-tab="inbound">Inbound</button>
+    <button class="ob-tab" data-tab="outbound">Outbound</button>
+  </div>
+
+  <!-- Shared controls -->
   <div class="controls">
+    <div class="ob-teams" data-view="outbound" hidden>
+      <button class="ob-team active" data-team="sales">Sales</button>
+      <button class="ob-team" data-team="service">Service</button>
+    </div>
     <div class="file-input-wrap">
       <input type="file" id="outbound-file" accept=".csv">
       <div class="file-btn" id="outbound-btn">
@@ -43,27 +53,26 @@
     <div class="file-input-wrap">
       <input type="file" id="status-file" accept=".csv">
       <div class="file-btn" id="status-btn">
-        <span class="tag tag-sts">STS</span>
+        <span class="tag tag-sts">STATUS</span>
         <span class="fname" id="status-filename">Choose agent status CSV…</span>
       </div>
     </div>
     <div class="divider"></div>
-    <div class="date-range-row">
+    <div class="date-range-row" data-view="inbound">
       <input type="date" id="date-from">
       <span class="date-sep">→</span>
       <input type="date" id="date-to">
     </div>
-    <button class="run-btn">APPLY</button>
-    <button class="export-btn" id="export-btn">Export JPEG</button>
+    <button class="run-btn" id="apply-btn">APPLY</button>
   </div>
 
-  <div class="live-chip">
+  <div class="live-chip" data-view="inbound">
     <div class="live-dot"></div>
     <span id="header-date">No data loaded</span>
   </div>
 </div>
 
-<main>
+<main data-view="inbound">
   <div id="dashboard">
     <div class="section-title"><span>Selected Range</span></div>
     
@@ -90,13 +99,26 @@
   <div id="empty-state" class="empty-state">
     <div class="empty-icon">📊</div>
     <div class="empty-title">No Data Loaded</div>
-    <div class="empty-sub">Upload the inbound and outbound CSV files (agent status CSV is optional), select a date range, then click APPLY.</div>
+    <div class="empty-sub">Upload the outbound and inbound CSV files, select a date range, then click APPLY.</div>
   </div>
 </main>
 
-<footer>INCHEON KIA CONTACT CENTRE DASHBOARD · ABANDONED RULE: Last missed call BEFORE 6PM only · HYPERLOCAL group excluded</footer>
+<main data-view="outbound" hidden>
+  <div id="ob-status" class="ob-status"></div>
+  <div id="ob-dashboard"><div id="ob-board"></div></div>
+  <div id="ob-empty" class="empty-state">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">No Data Loaded</div>
+    <div class="empty-sub">Upload the outbound and agent status CSV files, then click APPLY.</div>
+  </div>
+</main>
+<div id="ob-tip"></div>
+
+<footer data-view="inbound">INCHEON KIA CONTACT CENTRE DASHBOARD · ABANDONED RULE: Last missed call BEFORE 6PM only · HYPERLOCAL group excluded</footer>
+<footer data-view="outbound" hidden>INCHEON KIA CONTACT CENTRE DASHBOARD · OUTBOUND · DATE TAKEN FROM AGENT STATUS FILE</footer>
 
 <!-- Application Logic -->
 <script src="app.js"></script>
+<script src="outbound.js"></script>
 </body>
 </html>

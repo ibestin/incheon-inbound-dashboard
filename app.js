@@ -1220,7 +1220,7 @@ function renderHourlyComparison(toVal, sfx = '') {
 
 function initChartDefaults() {
   Chart.defaults.font.family = "'JetBrains Mono', monospace";
-  Chart.defaults.font.size = 10;
+  Chart.defaults.font.size = 12;
 }
 
 function baseChartOptions(opts = {}) {
@@ -1240,7 +1240,7 @@ function baseChartOptions(opts = {}) {
           color: '#4b5567',
           font: {
             family: 'Inter',
-            size: 10
+            size: 12
           }
         }
       },
@@ -1372,45 +1372,7 @@ function renderCharts(agents) {
 }
 
 
-/* ─── 7. EXPORT & FILE FLOW ───────────────────────────────────────────── */
-
-async function exportToJPEG(containerId = 'export-container') {
-  const container = $(containerId);
-
-  if (!container) {
-    setStatus('Nothing to export. Please load data first.', 'error');
-    return;
-  }
-
-  setStatus('Generating JPEG...', '');
-
-  try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      backgroundColor: '#f3f5f9',
-      logging: false,
-      useCORS: true
-    });
-
-    const label = $('header-date').textContent.replace(/[\s|→]+/g, '_');
-
-    const link = document.createElement('a');
-
-    link.download = `incheon_dashboard_${label}.jpeg`;
-    link.href = canvas.toDataURL('image/jpeg', 0.95);
-
-    link.click();
-
-    setStatus('JPEG exported successfully!', 'success');
-
-    setTimeout(() => setStatus('', ''), 3000);
-
-  } catch (err) {
-    console.error('Export error:', err);
-
-    setStatus('Failed to generate JPEG. Please try again.', 'error');
-  }
-}
+/* ─── 7. MESSAGES & FILE FLOW ───────────────────────────────────────────── */
 
 let toastTimer = null;
 
@@ -1613,7 +1575,6 @@ function runDashboard() {
 
     $('dashboard').classList.add('show');
     $('empty-state').style.display = 'none';
-    $('export-btn').style.display = 'flex';
 
     const rangeLabel = from === to
       ? from
@@ -1653,12 +1614,6 @@ function init() {
 
   if (runBtn) {
     runBtn.addEventListener('click', runDashboard);
-  }
-
-  const exportBtn = $('export-btn');
-
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => exportToJPEG());
   }
 
   const t = new Date();

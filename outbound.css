@@ -1,0 +1,34 @@
+/* Outbound tab. Base styles come from style.css */
+[hidden] { display: none !important; }
+.ob-tabs, .ob-teams { display: flex; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.ob-tab, .ob-team { border: 0; background: none; border-radius: 6px; height: 32px; padding: 0 12px; font: 600 14px 'Inter', sans-serif; color: var(--text-mid); cursor: pointer; }
+.ob-tab.active, .ob-team.active { background: var(--accent); color: #fff; }
+.ob-status { display: none; font: 13px 'JetBrains Mono', monospace; padding: 7px 12px; border-radius: 8px; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--border); }
+.ob-status.show { display: block; }
+.ob-status.error { color: var(--red); border-color: #f5c2c2; background: #fef2f2; }
+.ob-status.success { color: var(--green); border-color: #bde5c9; background: var(--green-soft); }
+#ob-dashboard { display: none; }
+#ob-board { background: var(--bg); padding: 2px; }
+.ob-card { margin-bottom: 12px; }
+.ob-scroll { overflow-x: auto; }
+.ob-card th, .ob-card td { padding-left: 8px; padding-right: 8px; }
+tbody tr td.ob-idle { background: #fee2e2; color: #b91c1c; font-weight: 700; }
+tbody tr.ob-total td { background: var(--surface2); font-weight: 700; }
+.ob-timeline { padding: 10px 16px 14px; }
+.ob-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; font-size: 13px; color: var(--text-mid); }
+.ob-legend span { display: flex; align-items: center; gap: 5px; }
+.ob-legend i { width: 12px; height: 12px; border-radius: 3px; }
+.ob-legend i.ob-gap { border: 1px dashed var(--border-strong); }
+.ob-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.ob-name { width: 140px; flex-shrink: 0; font-size: 14px; }
+.ob-axis, .ob-track { position: relative; flex: 1; }
+.ob-axis { height: 20px; font: 12px 'JetBrains Mono', monospace; color: var(--text-dim); }
+.ob-axis span { position: absolute; white-space: nowrap; }
+.ob-track { height: 22px; background: #f8f9fc; }
+.ob-grid { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--border-strong); }
+.ob-seg { position: absolute; top: 3px; bottom: 3px; min-width: 1px; }
+.ob-open { width: 3px; top: 0; bottom: 0; }
+#ob-tip { display: none; position: fixed; z-index: 500; pointer-events: none; white-space: pre; background: #151a27; color: #fff; border-radius: 6px; padding: 7px 10px; font: 13px/1.5 'JetBrains Mono', monospace; }
+.ob-exporting .ob-scroll { overflow: visible; }
+#in-timeline:not(:empty) { margin-bottom: 4px; }
+.ob-note { margin: 10px 16px 0; padding: 7px 10px; border-radius: 6px; background: #fdf3e3; color: #92400e; font-size: 13px; }
