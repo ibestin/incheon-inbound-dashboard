@@ -6,7 +6,7 @@
 /* ─── CONFIG: edit agent lists here ─── */
 const CFG = {
   TEAMS: {
-    sales: { label: 'Sales', agents: ['akhil','sreeraj','tony','joyal','balu','arunsiju','riswan','deepak','aravind','aswin','deepu','renjith','akshay','amal','sachu'] },
+    sales: { label: 'Sales', agents: ['akhil','sreeraj','tony','joyal','balu','arunsiju','riswan','deepak','aravind','aswin','deepu','renjith','akshay','amal','sachu','akhiljoby', 'vishnulal', 'akhiltc', 'arshad'] },
     service: { label: 'Service', agents: ['abhins_pm','charls','anil','nidhil','jinu','nived','davood','nitheesh','alan','anandhu','justin','aruntk','rahuls','hamdan'] }
   },
   HOURS: { start: 9, end: 18 },            // Outbound: 09:00 up to 18:00
