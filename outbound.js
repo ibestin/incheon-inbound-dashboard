@@ -13,6 +13,7 @@ const CFG = {
   INBOUND_HOURS: { start: 8, end: 20 },    // Inbound timeline: 08:00 to 20:00
   OFFLINE: ['UNAVAILABLE', 'DISCONNECTED'],
   ANSWERED: 'ANSWERED',
+  LONG_PAUSE_SEC: 900,                     // Outbound: a single pause longer than 15 min
   STYLE: {
     BREAK: ['#dc2626', 'Break'],
     PAUSED: ['#d97706', 'Paused'],
@@ -59,7 +60,8 @@ function parseStatusRows(rows) {
   rows.forEach((r, i) => {
     if (!clean(r['Agent']) && !clean(r['Status']) && !clean(r['Time'])) return;   // blank footer lines
     const t = parseStamp(r['Time'], true);
-    const agent = clean(r['Agent']).toLowerCase(), status = clean(r['Status']).toUpperCase();
+    const agent = clean(r['Agent']).toLowerCase(), raw = clean(r['Status']).toUpperCase();
+    const status = raw === 'PAUSE' ? 'PAUSED' : raw;   // same mapping as the inbound table
     if (!t || !agent || !status) { skipped++; return; }
     out.push({ ...t, agent, status, dur: parseDur(r['Total Duration']), sl: Number(r['SL No.']) || i + 1 });
   });
@@ -100,8 +102,8 @@ function compute(teamKey, statusRows, callRows) {
       name, log, hours, first, last,
       handled: calls.length, answered: calls.filter((c) => c.answered).length,
       login: log.length ? Math.max(0, last - first - offline) : null,
-      available: t('AVAILABLE'), oncall: t('ONOCALL'), brk: t('BREAK'), paused: t('PAUSED'), closure: t('CLOSURE'),
-      avgClosure: log.length && calls.length ? (by.CLOSURE || 0) / calls.length : null,
+      available: t('AVAILABLE'), oncall: t('ONOCALL'), brk: t('BREAK'), paused: t('PAUSED'),
+      longPause: log.length ? log.filter((r) => r.status === 'PAUSED' && r.dur > CFG.LONG_PAUSE_SEC).length : null,
       absent: !log.length && !calls.length
     };
   });
@@ -109,7 +111,7 @@ function compute(teamKey, statusRows, callRows) {
 
 /* ─── FORMATTING ─── */
 const hms = (s) => (s === null ? '—' : `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(Math.floor(s % 60))}`);
-const mmss = (s) => { if (s === null) return '—'; const r = Math.round(s); return `${pad(Math.floor(r / 60))}:${pad(r % 60)}`; };
+const countCell = (n) => (n === null ? '—' : `<span class="${n > 0 ? 'warn' : 'zero'}">${n}</span>`);
 const rate = (a, b) => (b ? `${(a / b * 100).toFixed(1)}%` : '—');
 const clock = (s) => { const h = Math.floor(s / 3600) % 24; return `${(h % 12) || 12}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)} ${h < 12 ? 'AM' : 'PM'}`; };
 const sum = (list, k) => list.reduce((t, a) => t + (a[k] || 0), 0);
@@ -121,14 +123,12 @@ const cells = (list) => list.map((v) => `<td class="right">${v}</td>`).join('');
 /* ─── RENDER ─── */
 const longDate = (day) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 function performanceTable(agents) {
-  const head = ['Agent','Handled','Answered','Answering %','First Login','Login Hours','Available','On-Call','Break','Paused','Closure','Avg Closure'];
-  const body = agents.map((a) => `<tr>${nameCell(a)}${cells([a.handled, a.answered, rate(a.answered, a.handled), a.first === null ? '—' : clock(a.first), hms(a.login), hms(a.available), hms(a.oncall), hms(a.brk), hms(a.paused), hms(a.closure), mmss(a.avgClosure)])}</tr>`).join('');
+  const head = ['Agent','Handled','Answered','Answering %','First Login','Login Hours','Available','On-Call','Break','Paused',`Long Pauses (>${CFG.LONG_PAUSE_SEC / 60}m)`];
+  const body = agents.map((a) => `<tr>${nameCell(a)}${cells([a.handled, a.answered, rate(a.answered, a.handled), a.first === null ? '—' : clock(a.first), hms(a.login), hms(a.available), hms(a.oncall), hms(a.brk), hms(a.paused), countCell(a.longPause)])}</tr>`).join('');
   const logged = agents.filter((a) => a.log.length);
   const total = (k) => (logged.length ? hms(sum(logged, k)) : '—');
-  /* team average closure uses only agents who have status data */
-  const loggedCalls = sum(logged, 'handled');
   const H = sum(agents, 'handled'), A = sum(agents, 'answered');
-  const foot = `<tr class="ob-total"><td>Team Total</td>${cells([H, A, rate(A, H), '—', total('login'), total('available'), total('oncall'), total('brk'), total('paused'), total('closure'), mmss(loggedCalls ? sum(logged, 'closure') / loggedCalls : null)])}</tr>`;
+  const foot = `<tr class="ob-total"><td>Team Total</td>${cells([H, A, rate(A, H), '—', total('login'), total('available'), total('oncall'), total('brk'), total('paused'), countCell(logged.length ? sum(logged, 'longPause') : null)])}</tr>`;
   return table(head, body, foot);
 }
 
@@ -187,7 +187,7 @@ function render() {
   $('ob-board').innerHTML = `
     <div class="date-banner"><div class="date-display"><span>${label} Outbound</span> · ${dayText}</div></div>
     <div class="kpi-strip">${kpis.map(([l, v], i) => `<div class="kpi-card c${i + 1}"><div class="kpi-label">${l}</div><div class="kpi-main"><div class="kpi-value">${v}</div></div></div>`).join('')}</div>
-    ${card('Agent Performance', 'Durations HH:MM:SS · Avg Closure MM:SS', performanceTable(agents))}
+    ${card('Agent Performance', 'Durations HH:MM:SS', performanceTable(agents))}
     ${card('Hourly Calls by Agent', 'Handled / Answered', hourlyTable(agents))}
     ${card('Status Timeline', 'Hover a segment for details', timeline(agents, CFG.HOURS, true))}`;
   $('ob-dashboard').style.display = 'block';
